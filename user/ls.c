@@ -30,7 +30,7 @@ ls(char *path)
   int fd;
   struct dirent de;
   struct stat st;
-
+  printf("begin ls , ths path length is %d\n",strlen(path));
   if((fd = open(path, O_RDONLY)) < 0){
     fprintf(2, "ls: cannot open %s\n", path);
     return;
@@ -56,11 +56,13 @@ ls(char *path)
     strcpy(buf, path);
     p = buf+strlen(buf);
     *p++ = '/';
+    printf("before ls , the dir is %s\n",buf);
     while(read(fd, &de, sizeof(de)) == sizeof(de)){
       if(de.inum == 0)
         continue;
       memmove(p, de.name, DIRSIZ);
       p[DIRSIZ] = 0;
+
       if(stat(buf, &st) < 0){
         printf("ls: cannot stat %s\n", buf);
         continue;
