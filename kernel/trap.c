@@ -97,6 +97,7 @@ usertrapret(void)
   intr_off();
 
   // send syscalls, interrupts, and exceptions to uservec in trampoline.S
+  // 因为TRAMPOLINE是指向trampoline.S的开头位置。所以(uservec - trampoline)能够计算出偏移量，然后加上TRAMPOLINE就指向了uservec。
   uint64 trampoline_uservec = TRAMPOLINE + (uservec - trampoline);
   w_stvec(trampoline_uservec);
 

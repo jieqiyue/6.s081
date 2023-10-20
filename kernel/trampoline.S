@@ -33,6 +33,7 @@ uservec:
 
         # each process has a separate p->trapframe memory area,
         # but it's mapped to the same virtual address
+        # mapping the trapframe is necessary to save/restore the state of the user process,
         # (TRAPFRAME) in every process's user page table.
         li a0, TRAPFRAME
         
@@ -72,7 +73,8 @@ uservec:
         csrr t0, sscratch
         sd t0, 112(a0)
 
-        # initialize kernel stack pointer, from p->trapframe->kernel_sp
+        # initialize kernel stack pointer, from p->trapframe->kernel_sp, a0一直到这里都没有改变,还是指向了TRAPFRAME
+        # todo 为什么这里能够使用8这个偏移量？
         ld sp, 8(a0)
 
         # make tp hold the current hartid, from p->trapframe->kernel_hartid

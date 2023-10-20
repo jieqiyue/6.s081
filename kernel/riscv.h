@@ -360,4 +360,6 @@ typedef uint64 *pagetable_t; // 512 PTEs
 // MAXVA is actually one bit less than the max allowed by
 // Sv39, to avoid having to sign-extend virtual addresses
 // that have the high bit set.
+//At the top of the address space xv6 reserves a page for a trampoline and
+//a page mapping the process’s trapframe.
 #define MAXVA (1L << (9 + 9 + 9 + 12 - 1))
