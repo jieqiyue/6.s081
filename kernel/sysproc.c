@@ -5,6 +5,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
 
 uint64
 sys_exit(void)
@@ -90,4 +91,42 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+uint64 sys_trace(void){
+    //printf("进入了sys_trace函数\n");
+    int trace;
+    argint(0, &trace);
+
+    if(trace < 0){
+      //  trace = 0;
+      return -1;
+    }
+    //printf("sys_trace函数开始赋值\n");
+    myproc()->trace = trace;
+    //printf("sys_trace函数执行完毕：%d\n",myproc()->trace);
+    //p->trace = trace;
+
+    return 0;
+}
+
+uint64 sys_sysinfo(void){
+    uint64 procnums = procnum();
+    uint64 freemembytes = kfreebyte();
+
+    // copyout
+    uint64 sysinfoaddr = 0;
+
+    argaddr(0, &sysinfoaddr); // 将用户态的第一个参数赋值到st中。
+
+    struct sysinfo sinfo;
+    sinfo.freemem = freemembytes;
+    sinfo.nproc = procnums;
+
+    struct proc *p = myproc();
+    if(copyout(p->pagetable,sysinfoaddr,(char *)&sinfo,sizeof(sinfo)) < 0){
+        return -1;
+    }
+
+    return 0;
 }

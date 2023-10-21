@@ -25,8 +25,10 @@ argfd(int n, int *pfd, struct file **pf)
   struct file *f;
 
   argint(n, &fd);
+  // 其实赋值语句（f=myproc()->ofile[fd]）已经蕴含在了这个判断里面
   if(fd < 0 || fd >= NOFILE || (f=myproc()->ofile[fd]) == 0)
     return -1;
+  // 对指针进行判断就是判断指针是否为空。
   if(pfd)
     *pfd = fd;
   if(pf)
@@ -113,7 +115,7 @@ sys_fstat(void)
   struct file *f;
   uint64 st; // user pointer to struct stat
 
-  argaddr(1, &st);
+  argaddr(1, &st); // 将用户态的第一个参数赋值到st中。
   if(argfd(0, 0, &f) < 0)
     return -1;
   return filestat(f, st);

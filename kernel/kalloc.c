@@ -80,3 +80,20 @@ kalloc(void)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
 }
+
+uint64 kfreebyte(){
+    struct run *r;
+    r = kmem.freelist;
+    int freepage = 0;
+
+    while(r){
+        freepage++;
+        r = r->next;
+    }
+
+    uint64 freebyte = 0;
+    //printf("inside kernel kfreebyte,free page num is %d\n",freepage);
+    freebyte = 4096 * freepage;
+
+    return freebyte;
+}
