@@ -24,6 +24,7 @@ kvmmake(void)
   kpgtbl = (pagetable_t) kalloc();
   memset(kpgtbl, 0, PGSIZE);
 
+  // 这个映射应该是固定要将某一个部分的物理内存映射到虚拟内存中，这个地址都是固定的，所以，一定得是参数指定的吧。
   // uart registers
   kvmmap(kpgtbl, UART0, UART0, PGSIZE, PTE_R | PTE_W);
 
@@ -45,7 +46,7 @@ kvmmake(void)
 
   // allocate and map a kernel stack for each process.
   proc_mapstacks(kpgtbl);
-  
+
   return kpgtbl;
 }
 
@@ -91,14 +92,19 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
   for(int level = 2; level > 0; level--) {
     pte_t *pte = &pagetable[PX(level, va)];
     if(*pte & PTE_V) {
+        // 这个pagetable是指向的是三级页表中的某一级页表，刚开始是指向第三级。
       pagetable = (pagetable_t)PTE2PA(*pte);
     } else {
       if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
         return 0;
+      // 这里直接设置是没有问题的。因为在上两行的kalloc中已经给pagetable赋值了，如果赋值失败了，则会在上一行代码中提出。
       memset(pagetable, 0, PGSIZE);
+      // 能走到这里的情况下，都是下一级页表没有分配的。由于现在pagetable已经指向了下一页了，所以还需要把这个pagetable设置回上一页的pte中。
       *pte = PA2PTE(pagetable) | PTE_V;
     }
   }
+  // 由于上面循环了两次，所以到这里的时候，pagetable是指向了第三级页表。所以将va右移12位丢弃页内偏移就行了。此时就能得到第三级页表中的pte。
+  // 然后返回pte。由于这个pte中的ppn存放的是真正的虚拟地址对应的物理地址。所以这里仅仅只是返回了pte，有可能返回之后还需要立马kalloc一个页，然后设置到这个pte中的ppn中。
   return &pagetable[PX(0, va)];
 }
 
@@ -140,6 +146,7 @@ kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 // va and size MUST be page-aligned.
 // Returns 0 on success, -1 if walk() couldn't
 // allocate a needed page-table page.
+// 将va开始的size个大小的虚拟内存映射到对应的pa上。操作的是pagetable指向的页表。
 int
 mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 {
@@ -162,6 +169,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
       return -1;
     if(*pte & PTE_V)
       panic("mappages: remap");
+    // 由于这里返回的是第三级页表的pte，而这个pte中的物理地址还是没有设置的。
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
       break;

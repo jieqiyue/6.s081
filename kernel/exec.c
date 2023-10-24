@@ -57,6 +57,7 @@ exec(char *path, char **argv)
       continue;
     if(ph.memsz < ph.filesz)
       goto bad;
+    // 内核的安全性检测
     if(ph.vaddr + ph.memsz < ph.vaddr)
       goto bad;
     if(ph.vaddr % PGSIZE != 0)
@@ -84,6 +85,7 @@ exec(char *path, char **argv)
     goto bad;
   sz = sz1;
   uvmclear(pagetable, sz-2*PGSIZE);
+  // sp指向的是栈底。栈是从高地址向低地址增长。
   sp = sz;
   stackbase = sp - PGSIZE;
 

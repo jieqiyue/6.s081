@@ -38,6 +38,7 @@ proc_mapstacks(pagetable_t kpgtbl)
     char *pa = kalloc();
     if(pa == 0)
       panic("kalloc");
+    // KSTACK分配了两个页的大小，但是只使用了一个kalloc，所以有一个页是没有被映射的。
     uint64 va = KSTACK((int) (p - proc));
     kvmmap(kpgtbl, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
   }
