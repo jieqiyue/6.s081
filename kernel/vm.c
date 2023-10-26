@@ -82,6 +82,7 @@ kvminithart()
 //   21..29 -- 9 bits of level-1 index.
 //   12..20 -- 9 bits of level-0 index.
 //    0..11 -- 12 bits of byte offset within the page.
+// 获取第三级页表的pte。
 pte_t *
 walk(pagetable_t pagetable, uint64 va, int alloc)
 {
@@ -139,7 +140,8 @@ kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 // physical addresses starting at pa.
 // va and size MUST be page-aligned.
 // Returns 0 on success, -1 if walk() couldn't
-// allocate a needed page-table page.
+// allocate a needed page-table page.   将va位置的虚拟地址映射到pa这个位置上。具体va这个位置上是否存在一页是否已经申请了，那就需要在调用这个函数之前确定了。
+// 比如说初始化内核页表的时候，在kvmmake中传入的物理地址都是已经被初始化好的。比如说那些硬件暴露的寄存器以及trampoline。
 int
 mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 {
@@ -174,6 +176,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 // Remove npages of mappings starting from va. va must be
 // page-aligned. The mappings must exist.
 // Optionally free the physical memory.
+// 对于传入的npages必须是从va开始存在这么多页的映射的，不然会报panic。
 void
 uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
 {
@@ -281,6 +284,7 @@ freewalk(pagetable_t pagetable)
   // there are 2^9 = 512 PTEs in a page table.
   for(int i = 0; i < 512; i++){
     pte_t pte = pagetable[i];
+    // 第三级页表的PTE_R|PTE_W|PTE_X必然有一个位是被置位为1的。
     if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
       // this PTE points to a lower-level page table.
       uint64 child = PTE2PA(pte);
@@ -299,7 +303,10 @@ void
 uvmfree(pagetable_t pagetable, uint64 sz)
 {
   if(sz > 0)
+      // 这个函数是释放真正的存在于这个页表的第三级页表对应的物理内存的
     uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
+  // 这个函数是释放整个三级页表的一二两级中的所有pte以及这两级页表。
+    //errorcheck(pagetable,0,4);
   freewalk(pagetable);
 }
 
@@ -449,3 +456,34 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+void vmprinthelp(pagetable_t pagetable,int deep){
+    // there are 2^9 = 512 PTEs in a page table.
+    for(int i = 0; i < 512; i++){
+        pte_t pte = pagetable[i];
+        uint64 child = PTE2PA(pte);
+        if(pte & PTE_V){
+            // 打印前缀
+            for(int i = 0;i < deep;i++){
+                printf(" ..");
+            }
+            // 打印pte的编号
+            printf("%d:",i);
+            // 打印pte
+            printf(" pte %p",pte);
+            // 打印物理地址
+            printf(" pa %p\n", child);
+
+            if(deep <= 2)
+                vmprinthelp((pagetable_t)child,deep + 1);
+        }
+    }
+
+    return ;
+}
+
+void vmprint(pagetable_t pagetable){
+    printf("page table %p\n",pagetable);
+    vmprinthelp(pagetable,1);
+}
+

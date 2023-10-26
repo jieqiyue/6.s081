@@ -19,6 +19,27 @@ int flags2perm(int flags)
     return perm;
 }
 
+
+// 错误检测
+void
+errorcheck(pagetable_t pagetable,int deep,int pos)
+{
+    printf("begin to exec error check,deep:%d,pos:%d\n",deep,pos);
+    // there are 2^9 = 512 PTEs in a page table.
+    for(int i = 0; i < 512; i++){
+        pte_t pte = pagetable[i];
+        // 第三级页表的PTE_R|PTE_W|PTE_X必然有一个位是被置位为1的。
+        if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
+            // this PTE points to a lower-level page table.
+            uint64 child = PTE2PA(pte);
+            errorcheck((pagetable_t)child,deep + 1,pos);
+        } else if(pte & PTE_V){
+            printf("now,have an error,pte:%d,deep:%d,position:%d\n",pte,deep,pos);
+        }
+    }
+}
+
+
 int
 exec(char *path, char **argv)
 {
@@ -49,6 +70,9 @@ exec(char *path, char **argv)
   if((pagetable = proc_pagetable(p)) == 0)
     goto bad;
 
+//  printf("exec函数结束了proc_pagetable\n");
+//  errorcheck(p->pagetable,0,1);
+//  printf("error check over!!\n");
   // Load program into memory.
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
     if(readi(ip, 0, (uint64)&ph, off, sizeof(ph)) != sizeof(ph))
@@ -126,7 +150,13 @@ exec(char *path, char **argv)
   p->sz = sz;
   p->trapframe->epc = elf.entry;  // initial program counter = main
   p->trapframe->sp = sp; // initial stack pointer
+//  printf("exec function开始释放旧页表,oldsz is:%d\n",oldsz);
+//  errorcheck(oldpagetable,0,2);
+//  printf("error check over!!\n");
   proc_freepagetable(oldpagetable, oldsz);
+  //printf("exec function释放旧页表完成\n");
+  if(p->pid==1)
+    vmprint(p->pagetable);
 
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
@@ -139,6 +169,7 @@ exec(char *path, char **argv)
   }
   return -1;
 }
+
 
 // Load a program segment into pagetable at virtual address va.
 // va must be page-aligned

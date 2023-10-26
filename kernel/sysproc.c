@@ -75,6 +75,44 @@ int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
+  //printf("begin to exec sys_pgaccess\n");
+  uint64 startaddr;
+  uint64 copyoutaddr;
+  int pgnum;
+  int kbitmask = 0;
+
+  argaddr(0, &startaddr);
+  argint(1, &pgnum);
+  argaddr(2,&copyoutaddr);
+
+  //printf("kernel mode sys_pgaccess,startaddr addr is:%p,pgnum is :%d,copyoutaddr is:%p\n",startaddr,pgnum,copyoutaddr);
+  if(pgnum > MAXACPAGE){
+      printf("in kernel mode,pgnum > MAXACPAGE，pgnum: %d\n",pgnum);
+      return -1;
+  }
+
+  struct proc *proc = myproc();
+  uint64 va0;
+  //va0 = PGROUNDDOWN(startaddr);
+  va0 = startaddr;
+  //printf("before kernel init bitmask,bitmask is:%d\n",kbitmask);
+  for(int i = 0;i < pgnum;i++){
+      pte_t *pte;
+      pte = walk(proc->pagetable, va0, 0);
+      if(*pte & PTE_A){
+         // printf("kernel mode find a pos,i is :%d\n",i);
+          kbitmask = kbitmask | (1 << i);
+         // printf("before clear pte in kernel:%p\n",*pte);
+          *pte = (*pte) & (~PTE_A);
+          //printf("after clear pte in kernel:%p\n",*pte);
+      }
+      va0 = va0 + PGSIZE;
+  }
+
+  if(copyout(proc->pagetable,copyoutaddr,(char *)&kbitmask,sizeof(kbitmask)) < 0){
+      return -1;
+  }
+
   return 0;
 }
 #endif

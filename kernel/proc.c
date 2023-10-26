@@ -197,9 +197,26 @@ proc_pagetable(struct proc *p)
   // trampoline.S.
   if(mappages(pagetable, TRAPFRAME, PGSIZE,
               (uint64)(p->trapframe), PTE_R | PTE_W) < 0){
+      // 由于到这个位置代码失败的话，其实上面的TRAMPOLINE已经分配成功了，所以在这里去释放掉这个映射。为什么不使用下面那个函数去释放呢？
+      // 因为ufree是默认传入的1，要释放底层的物理页就会把RAPFRAME和TRAMPOLINE释放掉。
     uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    // 由于到目前为止，并没有为这个进程分配任何的物理页，所以这里传入0.不能把TRAPFRAME和TRAMPOLINE给释放掉，因为要给其它进程用。
     uvmfree(pagetable, 0);
     return 0;
+  }
+
+  // 映射一页作为加速系统调用
+  struct usyscall *speedup = (struct usyscall *)kalloc();
+  speedup->pid = p->pid;
+  //printf("分配了加速页，当前进程id:%d\n",speedup->pid);
+  if(mappages(pagetable, USYSCALL, PGSIZE,
+              (uint64)speedup,PTE_R|PTE_U) < 0){
+      printf("将USYSCALL映射到虚拟内存空间失败\n");
+      uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+      uvmunmap(pagetable, TRAPFRAME, 1, 0);
+      uvmfree(pagetable, 0);
+
+      return 0;
   }
 
   return pagetable;
@@ -212,6 +229,8 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable, USYSCALL, 1, 1);
+  //errorcheck(pagetable,0,3);
   uvmfree(pagetable, sz);
 }
 
