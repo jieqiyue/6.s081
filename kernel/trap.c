@@ -116,7 +116,7 @@ usertrapret(void)
   x |= SSTATUS_SPIE; // enable interrupts in user mode
   w_sstatus(x);
 
-  // set S Exception Program Counter to the saved user pc.
+  // set S Exception Program Counter to the saved user pc.usertrap中有可能会改变epc的值，所以这里进行更新。
   w_sepc(p->trapframe->epc);
 
   // tell trampoline.S the user page table to switch to.
