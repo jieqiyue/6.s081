@@ -1,0 +1,4 @@
+1. a0 register,a2 register hold 13 to call printf.
+2. inline function.
+3. 0x64a.
+4. ra=0x38

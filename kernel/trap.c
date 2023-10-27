@@ -76,6 +76,16 @@ usertrap(void)
   if(killed(p))
     exit(-1);
 
+  p->nticks++;
+  if(which_dev == 2 && (p->ticks > 0) && (p->nticks > p->ticks) && !p->isalrming){
+      //printf("process name is :%s\n",p->name);
+      p->altrapframe = *(p->trapframe);
+      //printf("is trap.c:82,the a0 is:%d,the altrapframe a0 is %d\n",p->trapframe->a0,p->altrapframe.a0);
+     // 在这里修改p->trapframe->epc，因为在usertrapret中会将这个值给赋值到sepc寄存器上面
+      p->trapframe->epc = p->psigalrmfunc;
+      p->isalrming = 1;
+  }
+
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
     yield();
@@ -113,6 +123,7 @@ usertrapret(void)
   // set S Previous Privilege mode to User.
   unsigned long x = r_sstatus();
   x &= ~SSTATUS_SPP; // clear SPP to 0 for user mode
+  // 由于在进入中断的时候，已经将SIE位置为0，所以不会响应中断，此时需要返回到用户态了，所以还是得把这个位给打开。以便于返回用户态的时候能够是打开中断的状态。
   x |= SSTATUS_SPIE; // enable interrupts in user mode
   w_sstatus(x);
 
@@ -122,9 +133,13 @@ usertrapret(void)
   // tell trampoline.S the user page table to switch to.
   uint64 satp = MAKE_SATP(p->pagetable);
 
+//  if(strncmp("alarmtest",p->name,9) == 0 && p->isalrming == 1){
+//      printf("in trap.c:135,the a0  is %d\0",p->trapframe->a0);
+//  }
+
   // jump to userret in trampoline.S at the top of memory, which 
   // switches to the user page table, restores user registers,
-  // and switches to user mode with sret.
+  // and switches to user mode with sret.sysproc.c
   uint64 trampoline_userret = TRAMPOLINE + (userret - trampoline);
   ((void (*)(uint64))trampoline_userret)(satp);
 }

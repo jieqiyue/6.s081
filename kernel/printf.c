@@ -133,3 +133,18 @@ printfinit(void)
   initlock(&pr.lock, "pr");
   pr.locking = 1;
 }
+
+void backtrace(){
+    uint64 *currentstack;
+    uint64 *upcurrentsaddr;
+    currentstack = (uint64*)r_fp();
+
+    printf("backtrace:\n");
+
+    upcurrentsaddr = (uint64*)PGROUNDUP(*currentstack);
+    while(currentstack < upcurrentsaddr){
+        //char *tmp = (char*)currentstack;
+        printf("%p\n",*(currentstack - 1));
+        currentstack = (uint64*)(*(currentstack - 2));
+    }
+}

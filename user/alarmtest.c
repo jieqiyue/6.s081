@@ -67,6 +67,7 @@ void __attribute__ ((noinline)) foo(int i, int *j) {
   if((i % 2500000) == 0) {
     write(2, ".", 1);
   }
+  //printf("begin to add j\n");
   *j += 1;
 }
 
@@ -103,7 +104,7 @@ test1()
     // occurred; another is that that registers may not be
     // restored correctly, causing i or j or the address ofj
     // to get an incorrect value.
-    printf("\ntest1 failed: foo() executed fewer times than it was called\n");
+    printf("\ntest1 failed: foo() executed fewer times than it was called,j is:%d,i is:%d\n",j,i);
   } else {
     printf("test1 passed\n");
   }
@@ -187,7 +188,7 @@ test3()
   asm volatile("mv %0, a0" : "=r" (a0) );
 
   if(a0 != 0xac)
-    printf("test3 failed: register a0 changed\n");
+    printf("test3 failed: register a0 changed,a0 is %d\n",a0);
   else
     printf("test3 passed\n");
 }

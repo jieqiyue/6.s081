@@ -67,6 +67,8 @@ sys_sleep(void)
     sleep(&ticks, &tickslock);
   }
   release(&tickslock);
+  //printf("begin to exec back trace\n");
+  backtrace();
   return 0;
 }
 
@@ -90,4 +92,33 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+uint64 sys_sigreturn(void){
+    struct proc *p = myproc();
+    *(p->trapframe) = p->altrapframe;
+    //printf("in sysproc.c:100,restore a0,the trapframe a0 is:%d\n",p->trapframe->a0);
+    p->nticks = 0;
+    p->isalrming = 0;
+
+    return p->altrapframe.a0;
+}
+
+uint64 sys_sigalarm(void){
+    int ticks = 0;
+    uint64 faddralarm = 0;
+
+    argint(0,&ticks);
+    argaddr(1, &faddralarm);
+
+    struct proc *p = myproc();
+//    if(ticks == 0 && faddralarm == 0){
+//        p->ticks = 0;
+//        p->nticks = 0;
+//        return 0;
+//    }
+    p->ticks = ticks;
+    p->psigalrmfunc = faddralarm;
+
+    return 0;
 }

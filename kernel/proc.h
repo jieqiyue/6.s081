@@ -104,4 +104,10 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  uint64 psigalrmfunc;         // sys_sigalarm func to call
+  int ticks;                   // record how many ticks should notify
+  int nticks;                  // record how many ticks have passed
+  int isalrming;               // indicate whether is exec alarm function
+  struct trapframe altrapframe;   // hold the register status when back to alarm handler
 };
