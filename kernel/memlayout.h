@@ -19,6 +19,7 @@
 
 // qemu puts UART registers here in physical memory.
 #define UART0 0x10000000L
+// 定义了uart这个设备的中断源是10
 #define UART0_IRQ 10
 
 // virtio mmio interface

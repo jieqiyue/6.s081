@@ -6,6 +6,9 @@
 #include "defs.h"
 #include "fs.h"
 
+
+#include "spinlock.h"
+#include "proc.h"
 /*
  * the kernel's page table.
  */
@@ -14,6 +17,8 @@ pagetable_t kernel_pagetable;
 extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
+
+extern int kpagerefs[]; // ref to kalloc.c
 
 // Make a direct-map page table for the kernel.
 pagetable_t
@@ -163,6 +168,10 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
     if(*pte & PTE_V)
       panic("mappages: remap");
     *pte = PA2PTE(pa) | perm | PTE_V;
+    // 这里是虚拟地址和物理地址建立连接的地方，也就是第一次设置PTE_W的地方，所以在这里可以用来判断是否是cow mapping page。
+    if(perm & PTE_W){
+        *pte = (*pte | PTE_C);
+    }
     if(a == last)
       break;
     a += PGSIZE;
@@ -315,7 +324,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  //char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -323,12 +332,20 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
+    // 因为这个函数是在fork中被调用的。所以所有有PTE_W的pte都得置为0
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    if(flags & PTE_W){
+      *pte = (*pte & ~PTE_W);
+      flags = PTE_FLAGS(*pte);
+    }
+
+    // 在这里对这个物理页的引用加一
+    kpagerefs[PHY2COWIND(pa)]++;
+//    if((mem = kalloc()) == 0)
+//      goto err;
+//    memmove(mem, (char*)pa, PGSIZE);
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
+      kfree((void *)pa);
       goto err;
     }
   }
@@ -366,9 +383,38 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     if(va0 >= MAXVA)
       return -1;
     pte = walk(pagetable, va0, 0);
-    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0 ||
-       (*pte & PTE_W) == 0)
-      return -1;
+
+    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0){
+        return -1;
+    }
+
+    if((*pte & PTE_W) == 0){
+        //printf("kernel copyout return -1\n");
+        if(!(*pte & PTE_C)){
+            return -1;
+        }
+
+        char *mem;
+        if((mem = kalloc()) == 0){
+            exit(-1);
+        }
+
+        uint64 paaddr = PTE2PA(*pte);
+        memmove(mem, (char*)paaddr, PGSIZE);
+        int flags = PTE_FLAGS(*pte);
+        *pte = (*pte) & (~PTE_V);
+
+        struct proc *p = myproc();
+        if(mappages(p->pagetable, va0, PGSIZE, (uint64)mem, (flags | PTE_W)) != 0){
+            kfree(mem);
+            return -1;
+        }else{
+            // 因为原来的这页现在已经分配了新的页了，所以引用计数得减一。
+            kfree((void *)paaddr);
+        }
+    }
+
+
     pa0 = PTE2PA(*pte);
     n = PGSIZE - (dstva - va0);
     if(n > len)

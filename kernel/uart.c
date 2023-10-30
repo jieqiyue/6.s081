@@ -31,6 +31,7 @@
 #define LCR 3                 // line control register
 #define LCR_EIGHT_BITS (3<<0)
 #define LCR_BAUD_LATCH (1<<7) // special mode to set baud rate
+// 这个是uart的基础偏移量加上5就是lsr。
 #define LSR 5                 // line status register
 #define LSR_RX_READY (1<<0)   // input is waiting to be read from RHR
 #define LSR_TX_IDLE (1<<5)    // THR can accept another character to send
@@ -158,6 +159,17 @@ uartstart()
 
 // read one input character from the UART.
 // return -1 if none is waiting.
+/*
+ * LINE STATUS REGISTER (LSR)
+ * LSR BIT 0:
+ * 0 = no data in receive holding register or FIFO.
+ * 1 = data has been receive and saved in the receive holding register or FIFO.
+ * ......
+ * LSR BIT 5:
+ * 0 = transmit holding register is full. 16550 will not accept any data for transmission.
+ * 1 = transmitter hold register (or FIFO) is empty. CPU can load the next character.
+ * ......
+ */
 int
 uartgetc(void)
 {

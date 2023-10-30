@@ -2146,6 +2146,7 @@ void
 MAXVAplus(char *s)
 {
   volatile uint64 a = MAXVA;
+  //int times = 0;
   for( ; a != 0; a <<= 1){
     int pid;
     pid = fork();
@@ -2162,6 +2163,7 @@ MAXVAplus(char *s)
     wait(&xstatus);
     if(xstatus != -1)  // did kernel kill child?
       exit(1);
+   // times++;
   }
 }
 
@@ -2995,7 +2997,7 @@ countfree()
     printf("pipe() failed in countfree()\n");
     exit(1);
   }
-  
+
   int pid = fork();
 
   if(pid < 0){
@@ -3005,13 +3007,14 @@ countfree()
 
   if(pid == 0){
     close(fds[0]);
-    
+    //printf("son close success!\n");
+   // int times =0;
     while(1){
       uint64 a = (uint64) sbrk(4096);
       if(a == 0xffffffffffffffff){
         break;
       }
-
+       // printf("son sbrk success,%d\n",times);
       // modify the memory to make sure it's really allocated.
       *(char *)(a + 4096 - 1) = 1;
 
@@ -3020,13 +3023,14 @@ countfree()
         printf("write() failed in countfree()\n");
         exit(1);
       }
+     // times++;
     }
 
     exit(0);
   }
 
   close(fds[1]);
-
+  //printf("father close success!\n");
   int n = 0;
   while(1){
     char c;
@@ -3057,6 +3061,7 @@ drivetests(int quick, int continuous, char *justone) {
         return 1;
       }
     }
+      printf("usertest 1 over\n");
     if(!quick) {
       if (justone == 0)
         printf("usertests slow tests starting\n");

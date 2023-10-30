@@ -180,6 +180,11 @@ filetest()
 int
 main(int argc, char *argv[])
 {
+//    int sz = 4096;
+//    char *p = sbrk(sz);
+//    fork();
+//    printf("user fork over \n");
+//    *(int *)p = 12;
   simpletest();
 
   // check that the first simpletest() freed the physical memory.

@@ -65,9 +65,38 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  } else if(r_scause() == 0x000000000000000f){
+    uint64 misaddr = r_stval();
+    pte_t *pte = walk(p->pagetable,misaddr,0);
+
+    if(!(*pte & PTE_C)){
+      setkilled(p);
+    }
+
+    char *mem;
+    if((mem = kalloc()) == 0){
+        exit(-1);
+    }
+
+    uint64 paaddr = PTE2PA(*pte);
+    memmove(mem, (char*)paaddr, PGSIZE);
+    int flags = PTE_FLAGS(*pte);
+    *pte = (*pte) & (~PTE_V);
+
+    if(mappages(p->pagetable, PGROUNDDOWN(misaddr), PGSIZE, (uint64)mem, (flags | PTE_W)) != 0){
+      kfree(mem);
+      setkilled(p);
+    }else{
+        // 因为原来的这页现在已经分配了新的页了，所以引用计数得减一。
+        kfree((void *)paaddr);
+    }
+  }else if((which_dev = devintr()) != 0){
     // ok
   } else {
+//    struct proc *parentproc = p->parent;
+//    pte_t *pte = walk(p->pagetable,r_stval(),0);
+//    printf("pte is:%d\n",*pte);
+//    printf("parent is %s\n",parentproc->name);
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     setkilled(p);

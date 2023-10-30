@@ -30,6 +30,8 @@ plicinithart(void)
 }
 
 // ask the PLIC what interrupt we should serve.
+// 有可能一次性发生多个中断。那么plic会通过优先级，编号等，进行决断。看哪个先被处理。plic决断之后，就会把当前要处理的中断的中断源的号码写入到
+// 这个位置。所以在这里可以读取出来。
 int
 plic_claim(void)
 {
@@ -39,6 +41,8 @@ plic_claim(void)
 }
 
 // tell the PLIC we've served this IRQ.
+// 在做完处理之后，写回这个寄存器中。以表示该中断已经处理完了，当写入这个寄存器之后，plic就会将下一个中断给放进来处理。因为上面也说了，有可能有多个中断同时到达。
+// 那么这个时候，就会去放行下一个中断。
 void
 plic_complete(int irq)
 {
