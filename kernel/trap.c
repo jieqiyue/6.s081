@@ -65,13 +65,20 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if(r_scause() == 0x000000000000000f){
+  } else if(r_scause() == 0x000000000000000f || r_scause() == 13){
     uint64 misaddr = r_stval();
-    if(misaddr > MAXVA){
-        printf("misaddr bigger than MAXVA!\n");
+    if(misaddr >= MAXVA || (misaddr <= PGROUNDDOWN(p->trapframe->sp) && misaddr >= PGROUNDDOWN(p->trapframe->sp) - PGSIZE)){
+        printf("misaddr bigger than MAXVA or addr in guard page!\n");
         exit(-1);
     }
     pte_t *pte = walk(p->pagetable,misaddr,0);
+    if(pte == 0){
+        printf("trap.c:usertrap fail,the pte is 0\n");
+        exit(-1);
+    }
+    if(pte == 0 || (*pte & PTE_V) == 0){
+        exit(-1);
+    }
 
     if(!(*pte & PTE_C)){
       exit(-1);
@@ -87,7 +94,7 @@ usertrap(void)
     int flags = PTE_FLAGS(*pte);
     *pte = (*pte) & (~PTE_V);
 
-    if(mappages(p->pagetable, PGROUNDDOWN(misaddr), PGSIZE, (uint64)mem, (flags | PTE_W)) != 0){
+    if(mappages(p->pagetable, PGROUNDDOWN(misaddr), PGSIZE, (uint64)mem, (flags | PTE_W) & (~PTE_C)) != 0){
       kfree(mem);
       exit(-1);
     }else{

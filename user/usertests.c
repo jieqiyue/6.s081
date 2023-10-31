@@ -86,7 +86,9 @@ copyout(char *s)
       printf("open(README) failed\n");
       exit(1);
     }
+
     int n = read(fd, (void*)addr, 8192);
+    printf("usertest,copyout,read success\n");
     if(n > 0){
       printf("read(fd, %p, 8192) returned %d, not -1 or 0\n", addr, n);
       exit(1);
@@ -1161,6 +1163,7 @@ fourfiles(char *s)
 
     pid = fork();
     if(pid < 0){
+      printf("user mode fourfiles fail,fork fail.\n");
       printf("fork failed\n", s);
       exit(1);
     }
@@ -2155,14 +2158,15 @@ MAXVAplus(char *s)
       printf("%s: fork failed\n", s);
       exit(1);
     }
-    printf("user mode maxvaplus fork success,times:%d\n",times);
     if(pid == 0){
+      printf("user mode child maxvaplus fork success,times:%d\n",times);
       *(char*)a = 99;
       printf("%s: oops wrote %x\n", s, a);
       exit(1);
     }
     int xstatus;
     wait(&xstatus);
+    printf("son have exit,xstatus:%d\n",xstatus);
     if(xstatus != -1)  // did kernel kill child?
       exit(1);
     times++;

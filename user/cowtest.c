@@ -185,16 +185,19 @@ main(int argc, char *argv[])
 //    fork();
 //    printf("user fork over \n");
 //    *(int *)p = 12;
-  simpletest();
+   // for(int i =0;i < 100;i++){
+        simpletest();
 
-  // check that the first simpletest() freed the physical memory.
-  simpletest();
+        // check that the first simpletest() freed the physical memory.
+        simpletest();
 
-  threetest();
-  threetest();
-  threetest();
+        threetest();
+        threetest();
+        threetest();
 
-  filetest();
+        filetest();
+  //  }
+
 
   printf("ALL COW TESTS PASSED\n");
 
