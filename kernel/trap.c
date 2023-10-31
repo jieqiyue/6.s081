@@ -67,15 +67,19 @@ usertrap(void)
     syscall();
   } else if(r_scause() == 0x000000000000000f){
     uint64 misaddr = r_stval();
+    if(misaddr > MAXVA){
+        printf("misaddr bigger than MAXVA!\n");
+        exit(-1);
+    }
     pte_t *pte = walk(p->pagetable,misaddr,0);
 
     if(!(*pte & PTE_C)){
-      setkilled(p);
+      exit(-1);
     }
 
     char *mem;
     if((mem = kalloc()) == 0){
-        exit(-1);
+      exit(-1);
     }
 
     uint64 paaddr = PTE2PA(*pte);
@@ -85,7 +89,7 @@ usertrap(void)
 
     if(mappages(p->pagetable, PGROUNDDOWN(misaddr), PGSIZE, (uint64)mem, (flags | PTE_W)) != 0){
       kfree(mem);
-      setkilled(p);
+      exit(-1);
     }else{
         // 因为原来的这页现在已经分配了新的页了，所以引用计数得减一。
         kfree((void *)paaddr);

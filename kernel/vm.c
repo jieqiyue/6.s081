@@ -90,8 +90,11 @@ kvminithart()
 pte_t *
 walk(pagetable_t pagetable, uint64 va, int alloc)
 {
-  if(va >= MAXVA)
-    panic("walk");
+  if(va >= MAXVA){
+      printf("va bigger than max va,va is:%d\n",va);
+      panic("walk");
+  }
+
 
   for(int level = 2; level > 0; level--) {
     pte_t *pte = &pagetable[PX(level, va)];
@@ -346,6 +349,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 //    memmove(mem, (char*)pa, PGSIZE);
     if(mappages(new, i, PGSIZE, pa, flags) != 0){
       kfree((void *)pa);
+      printf("in kernel,vm.c:uvmcopy,mappages fail\n");
       goto err;
     }
   }
@@ -396,7 +400,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
         char *mem;
         if((mem = kalloc()) == 0){
-            exit(-1);
+            return -1;
         }
 
         uint64 paaddr = PTE2PA(*pte);

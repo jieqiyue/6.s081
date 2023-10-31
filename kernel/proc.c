@@ -285,6 +285,7 @@ fork(void)
 
   // Allocate process.
   if((np = allocproc()) == 0){
+    printf("fork fail,allocproc fail.\n");
     return -1;
   }
 

@@ -2146,14 +2146,16 @@ void
 MAXVAplus(char *s)
 {
   volatile uint64 a = MAXVA;
-  //int times = 0;
+  int times = 0;
   for( ; a != 0; a <<= 1){
+    printf("user mode maxvaplus,times:%d\n",times);
     int pid;
     pid = fork();
     if(pid < 0){
       printf("%s: fork failed\n", s);
       exit(1);
     }
+    printf("user mode maxvaplus fork success,times:%d\n",times);
     if(pid == 0){
       *(char*)a = 99;
       printf("%s: oops wrote %x\n", s, a);
@@ -2163,7 +2165,7 @@ MAXVAplus(char *s)
     wait(&xstatus);
     if(xstatus != -1)  // did kernel kill child?
       exit(1);
-   // times++;
+    times++;
   }
 }
 
