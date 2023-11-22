@@ -33,6 +33,8 @@ acquiresleep(struct sleeplock *lk)
 void
 releasesleep(struct sleeplock *lk)
 {
+    // 此处还需要acquire的原因是为了能够让下面三句话作为一个原子操作。
+    // 如果不是原子操作的话，其它进程可能会acquire到这个sleep lock。
   acquire(&lk->lk);
   lk->locked = 0;
   lk->pid = 0;

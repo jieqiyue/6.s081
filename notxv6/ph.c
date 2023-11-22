@@ -14,9 +14,11 @@ struct entry {
   struct entry *next;
 };
 struct entry *table[NBUCKET];
+pthread_mutex_t tbucketlock[NBUCKET];
 int keys[NKEYS];
 int nthread = 1;
 
+pthread_mutex_t lock;            // declare a lock
 
 double
 now()
@@ -42,6 +44,14 @@ void put(int key, int value)
   int i = key % NBUCKET;
 
   // is the key already present?
+   // pthread_mutex_lock(&lock);       // acquire lock
+   if(i < 0 || i > NBUCKET){
+       printf("index of bucket lock error,index:%d\n",i);
+       exit(-1);
+   }
+
+  pthread_mutex_lock(&tbucketlock[i]);
+
   struct entry *e = 0;
   for (e = table[i]; e != 0; e = e->next) {
     if (e->key == key)
@@ -55,19 +65,24 @@ void put(int key, int value)
     insert(key, value, &table[i], table[i]);
   }
 
+  pthread_mutex_unlock(&tbucketlock[i]);     // release lock
 }
 
 static struct entry*
 get(int key)
 {
   int i = key % NBUCKET;
+  if(i < 0 || i > NBUCKET){
+      printf("index of bucket lock error,index:%d\n",i);
+      exit(-1);
+  }
 
-
+  pthread_mutex_lock(&tbucketlock[i]);       // acquire lock
   struct entry *e = 0;
   for (e = table[i]; e != 0; e = e->next) {
     if (e->key == key) break;
   }
-
+  pthread_mutex_unlock(&tbucketlock[i]);     // release lock
   return e;
 }
 
@@ -105,6 +120,9 @@ main(int argc, char *argv[])
   void *value;
   double t1, t0;
 
+  for(int i = 0;i < NBUCKET;i++){
+      pthread_mutex_init(&tbucketlock[i], NULL); // initialize the lock
+  }
 
   if (argc < 2) {
     fprintf(stderr, "Usage: %s nthreads\n", argv[0]);

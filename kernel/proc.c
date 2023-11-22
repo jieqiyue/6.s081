@@ -488,6 +488,7 @@ sched(void)
 
   if(!holding(&p->lock))
     panic("sched p->lock");
+  // 检查是否是只持有了进程的锁。
   if(mycpu()->noff != 1)
     panic("sched locks");
   if(p->state == RUNNING)
