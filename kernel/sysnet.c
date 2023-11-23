@@ -16,7 +16,7 @@
 
 struct sock {
   struct sock *next; // the next socket in the list
-  uint32 raddr;      // the remote IPv4 address
+  uint32 raddr;      // the remote IPv4 address  要连接的远程地址
   uint16 lport;      // the local UDP port number
   uint16 rport;      // the remote UDP port number
   struct spinlock lock; // protects the rxq
@@ -24,7 +24,7 @@ struct sock {
 };
 
 static struct spinlock lock;
-static struct sock *sockets;
+static struct sock *sockets;  // sock链表
 
 void
 sockinit(void)

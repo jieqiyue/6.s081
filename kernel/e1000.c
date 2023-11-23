@@ -8,11 +8,11 @@
 #include "e1000_dev.h"
 #include "net.h"
 
-#define TX_RING_SIZE 16
+#define TX_RING_SIZE 16    //  这个是e1000设备要写入的数据包
 static struct tx_desc tx_ring[TX_RING_SIZE] __attribute__((aligned(16)));
 static struct mbuf *tx_mbufs[TX_RING_SIZE];
 
-#define RX_RING_SIZE 16
+#define RX_RING_SIZE 16   // 这个是e1000设备收取到的数据包
 static struct rx_desc rx_ring[RX_RING_SIZE] __attribute__((aligned(16)));
 static struct mbuf *rx_mbufs[RX_RING_SIZE];
 
@@ -92,6 +92,7 @@ e1000_init(uint32 *xregs)
   regs[E1000_IMS] = (1 << 7); // RXDW -- Receiver Descriptor Write Back
 }
 
+// 当需要发送数据包的时候，调用这个函数
 int
 e1000_transmit(struct mbuf *m)
 {
@@ -102,7 +103,30 @@ e1000_transmit(struct mbuf *m)
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after sending.
   //
-  
+  // 在e1000设备发送完毕之后，需要释放掉mbuf。
+    //printf("i am in e1000_transmit\n");
+    acquire(&e1000_lock);
+    uint32 index = regs[E1000_TDT];
+    struct tx_desc desc = tx_ring[index];
+    if(!(desc.status & E1000_TXD_STAT_DD)){
+        release(&e1000_lock);
+        printf("in kernel,status is not set,write\n");
+        return -1;   // 返回-1会使得调用方立马释放mbuf
+    }
+
+    // 由于是发送，所以可以先将index位置的mbuf给释放了
+    if(tx_mbufs[index]){
+        mbuffree(tx_mbufs[index]);
+    }
+
+    tx_mbufs[index] = m;
+    tx_ring[index].addr = (uint64)m->head;
+    tx_ring[index].length = m->len;
+    tx_ring[index].cmd = E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS;
+    regs[E1000_TDT] = (index + 1) % TX_RING_SIZE;
+
+    release(&e1000_lock);
+  // 返回0，并不会使调用方将mbuf给释放了。而是会等到下一次发送的时候再去释放。
   return 0;
 }
 
@@ -115,6 +139,38 @@ e1000_recv(void)
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
+  // 创建一个mbuf并且发送到net_rx中。
+  // 必须遍历rx ring，并发送。还得创建新的mbuf。
+   // printf("i am in e1000_recv\n");
+    while(1){
+       // acquire(&e1000_lock);
+        uint32 index = (regs[E1000_RDT] + 1) % TX_RING_SIZE;
+        struct rx_desc desc = rx_ring[index];
+
+        if(!(desc.status & E1000_RXD_STAT_DD)){
+            //release(&e1000_lock);
+            return ;
+        }
+
+        regs[E1000_RDT] = index;
+
+        rx_mbufs[index]->len = desc.length;
+        net_rx(rx_mbufs[index]);
+
+        struct mbuf *m;
+        m = mbufalloc(0);
+        if (!m){
+          //  release(&e1000_lock);
+            return ;
+        }
+
+        rx_mbufs[index] = m;
+        rx_ring[index].addr = (uint64)m->head;
+        rx_ring[index].status = 0;
+
+      //  release(&e1000_lock);
+    }
+
 }
 
 void

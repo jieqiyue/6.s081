@@ -6,6 +6,7 @@
 //
 // send a UDP packet to the localhost (outside of qemu),
 // and receive a response.
+// dport是目标端口
 //
 static void
 ping(uint16 sport, uint16 dport, int attempts)
@@ -20,11 +21,12 @@ ping(uint16 sport, uint16 dport, int attempts)
 
   // you can send a UDP packet to any Internet address
   // by using a different dst.
-  
+  // fd就是proc结构体中，该进程打开的文件描述符
   if((fd = connect(dst, sport, dport)) < 0){
     fprintf(2, "ping: connect() failed\n");
     exit(1);
   }
+ // printf("user level,connect success.\n");
 
   for(int i = 0; i < attempts; i++) {
     if(write(fd, obuf, strlen(obuf)) < 0){
@@ -32,14 +34,14 @@ ping(uint16 sport, uint16 dport, int attempts)
       exit(1);
     }
   }
-
+ // printf("user level,first ping success.\n");
   char ibuf[128];
   int cc = read(fd, ibuf, sizeof(ibuf)-1);
   if(cc < 0){
     fprintf(2, "ping: recv() failed\n");
     exit(1);
   }
-
+   // printf("user level,first write success.\n");
   close(fd);
   ibuf[cc] = '\0';
   if(strcmp(ibuf, "this is the host!") != 0){

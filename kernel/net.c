@@ -159,7 +159,7 @@ in_cksum(const unsigned char *addr, int len)
   return answer;
 }
 
-// sends an ethernet packet
+// sends an ethernet packet  这是网络栈上要发送以太网数据包的时候
 static void
 net_tx_eth(struct mbuf *m, uint16 ethtype)
 {
@@ -184,6 +184,7 @@ net_tx_ip(struct mbuf *m, uint8 proto, uint32 dip)
   struct ip *iphdr;
 
   // push the IP header
+  // mbufpushhdr中都是将head减去len。这样能得到一个低地址。这样得到的结果是mbuf中的buf是从低级的协议在前面的。
   iphdr = mbufpushhdr(m, *iphdr);
   memset(iphdr, 0, sizeof(*iphdr));
   iphdr->ip_vhl = (4 << 4) | (20 >> 2);
@@ -206,6 +207,7 @@ net_tx_udp(struct mbuf *m, uint32 dip,
   struct udp *udphdr;
 
   // put the UDP header
+  // 这里返回的其实是udp结构体的head指针
   udphdr = mbufpushhdr(m, *udphdr);
   udphdr->sport = htons(sport);
   udphdr->dport = htons(dport);

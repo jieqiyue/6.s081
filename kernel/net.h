@@ -7,7 +7,7 @@
 
 struct mbuf {
   struct mbuf  *next; // the next mbuf in the chain
-  char         *head; // the current start position of the buffer
+  char         *head; // the current start position of the buffer  // 指向buf中第一个可以被写入的位置
   unsigned int len;   // the length of the buffer
   char         buf[MBUF_SIZE]; // the backing store
 };
@@ -83,8 +83,8 @@ struct eth {
   uint16 type;
 } __attribute__((packed));
 
-#define ETHTYPE_IP  0x0800 // Internet protocol
-#define ETHTYPE_ARP 0x0806 // Address resolution protocol
+#define ETHTYPE_IP  0x0800 // Internet protocol   ipv4
+#define ETHTYPE_ARP 0x0806 // Address resolution protocol   arp
 
 // an IP packet header (comes after an Ethernet header).
 struct ip {

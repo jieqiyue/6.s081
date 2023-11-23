@@ -97,13 +97,14 @@
 #define E1000_TXD_STAT_DD    0x00000001 /* Descriptor Done */
 
 // [E1000 3.3.3]
+// 描述了要发送的数据包。
 struct tx_desc
 {
   uint64 addr;
   uint16 length;
   uint8 cso;
   uint8 cmd;
-  uint8 status;
+  uint8 status;  // 如果发送完毕之后，这个位置会被设置为E1000_TXD_STAT_DD。
   uint8 css;
   uint16 special;
 };
@@ -113,9 +114,10 @@ struct tx_desc
 #define E1000_RXD_STAT_EOP      0x02    /* End of Packet */
 
 // [E1000 3.2.3]
+// 描述符，描述了当处理速度跟不上接收速度的时候，e1000这个设备可以将接收到的数据存放在什么地方。
 struct rx_desc
 {
-  uint64 addr;       /* Address of the descriptor's data buffer */
+  uint64 addr;       /* Address of the descriptor's data buffer */   // 存放了可以写入的起始地址
   uint16 length;     /* Length of data DMAed into data buffer */
   uint16 csum;       /* Packet checksum */
   uint8 status;      /* Descriptor status */
