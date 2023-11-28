@@ -67,6 +67,9 @@ bget(uint dev, uint blockno)
     if(b->dev == dev && b->blockno == blockno){
       b->refcnt++;
       release(&bcache.lock);
+      // 这里可以先释放bcache的锁，然后再获取buf的锁。因为对于buf来说，能够保证一个时刻只有一个进程在操作buf就行了。
+      // 而且看起来会出现另外 一个进程也进入了这个方法，然后可能在下面的for循环中取出这个buf，但是其实是不会的。
+      // 因为b->refcnt不会等于0.
       acquiresleep(&b->lock);
       return b;
     }
@@ -78,7 +81,7 @@ bget(uint dev, uint blockno)
     if(b->refcnt == 0) {
       b->dev = dev;
       b->blockno = blockno;
-      b->valid = 0;
+      b->valid = 0;   // 设置为0，为了重新从磁盘上载入数据
       b->refcnt = 1;
       release(&bcache.lock);
       acquiresleep(&b->lock);
@@ -94,6 +97,7 @@ bread(uint dev, uint blockno)
 {
   struct buf *b;
 
+  // bget会找到指定的block，并返回它的缓存
   b = bget(dev, blockno);
   if(!b->valid) {
     virtio_disk_rw(b, 0);

@@ -70,6 +70,7 @@ balloc(uint dev)
 
   bp = 0;
   for(b = 0; b < sb.size; b += BPB){
+      // 将bitmap的那个block读入到内存中。
     bp = bread(dev, BBLOCK(b, sb));
     for(bi = 0; bi < BPB && b + bi < sb.size; bi++){
       m = 1 << (bi % 8);
@@ -175,6 +176,7 @@ bfree(int dev, uint b)
 
 struct {
   struct spinlock lock;
+  // inode的缓存
   struct inode inode[NINODE];
 } itable;
 
@@ -270,6 +272,7 @@ iget(uint dev, uint inum)
   ip->dev = dev;
   ip->inum = inum;
   ip->ref = 1;
+  // 这里只是简单地将一个槽位标记给某个inode使用，但这个inode的缓存副本现在还没有任何有效内容，需要在之后调用ilock，才能从磁盘上读入该inode的元数据和数据。
   ip->valid = 0;
   release(&itable.lock);
 
@@ -379,12 +382,14 @@ iunlockput(struct inode *ip)
 // Return the disk block address of the nth block in inode ip.
 // If there is no such block, bmap allocates one.
 // returns 0 if out of disk space.
+// 将文件分为1024一块的大小，对于一个指定的块号来说，它一定存放在inode的addrs中。也就是说文件的块号，一定能对应到磁盘的某一个块号。
 static uint
 bmap(struct inode *ip, uint bn)
 {
   uint addr, *a;
   struct buf *bp;
 
+  // 这里传入的bn就直接是表示的文件的第几块，对于一个文件来说，前面12块都是直接块。
   if(bn < NDIRECT){
     if((addr = ip->addrs[bn]) == 0){
       addr = balloc(ip->dev);
@@ -398,18 +403,23 @@ bmap(struct inode *ip, uint bn)
 
   if(bn < NINDIRECT){
     // Load indirect block, allocating if necessary.
+    // 下标为12的位置是二级指针的位置，如果这里是0的话，代表还没有分配。
     if((addr = ip->addrs[NDIRECT]) == 0){
       addr = balloc(ip->dev);
       if(addr == 0)
         return 0;
       ip->addrs[NDIRECT] = addr;
     }
+    // addr是通过balloc从整个磁盘取到的一个能用的block的number。
+    // 然后新分配的话，bp里面的data是空的。
     bp = bread(ip->dev, addr);
     a = (uint*)bp->data;
     if((addr = a[bn]) == 0){
+        // 这里发现如果是空的话，需要分配真实的，二级页面
       addr = balloc(ip->dev);
       if(addr){
         a[bn] = addr;
+        // 这里写入的bp是第12个下标指定的那个页面的buf。
         log_write(bp);
       }
     }
@@ -468,6 +478,7 @@ stati(struct inode *ip, struct stat *st)
 // Caller must hold ip->lock.
 // If user_dst==1, then dst is a user virtual address;
 // otherwise, dst is a kernel address.
+// off参数是指的在这个文件中的偏移量
 int
 readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
 {
@@ -654,6 +665,7 @@ namex(char *path, int nameiparent, char *name)
   struct inode *ip, *next;
 
   if(*path == '/')
+      // 获取根number的inode。
     ip = iget(ROOTDEV, ROOTINO);
   else
     ip = idup(myproc()->cwd);
