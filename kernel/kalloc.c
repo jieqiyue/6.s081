@@ -21,12 +21,14 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
-} kmem;
+} kmem[NCPU];
 
 void
 kinit()
 {
-  initlock(&kmem.lock, "kmem");
+  for(int i = 0;i < NCPU;i++){
+    initlock(&kmem[i].lock, "kmem");
+  }
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -35,8 +37,20 @@ freerange(void *pa_start, void *pa_end)
 {
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
+
+  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
     kfree(p);
+  }
+
+//  printf("init kfree success!\n");
+//  int total = 0;
+//  struct run * temp = kmem[0].freelist;
+//  while (temp){
+//    printf("%p\n",temp);
+//    temp = temp->next;
+//    total++;
+//  }
+//  printf("total:%d\n",total);
 }
 
 // Free the page of physical memory pointed at by pa,
@@ -55,11 +69,14 @@ kfree(void *pa)
   memset(pa, 1, PGSIZE);
 
   r = (struct run*)pa;
-
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
+  push_off();
+  int cpui = cpuid();
+ // printf("cpuid:%d,success release mem:%p\n",cpui,r);
+  acquire(&kmem[cpui].lock);
+  r->next = kmem[cpui].freelist;
+  kmem[cpui].freelist = r;
+  release(&kmem[cpui].lock);
+  pop_off();
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -69,12 +86,44 @@ void *
 kalloc(void)
 {
   struct run *r;
-
-  acquire(&kmem.lock);
-  r = kmem.freelist;
+  push_off();
+  int cpui = cpuid();
+  acquire(&kmem[cpui].lock);
+  r = kmem[cpui].freelist;
   if(r)
-    kmem.freelist = r->next;
-  release(&kmem.lock);
+    kmem[cpui].freelist = r->next;
+  release(&kmem[cpui].lock);
+
+  if(!r){
+    for(int i = 0 ;i < NCPU;i++){
+      if(i == cpui){
+        continue;
+      }
+
+      acquire(&kmem[i].lock);
+      r = kmem[i].freelist;
+
+      if(r){
+        kmem[i].freelist = r->next;
+      }
+      release(&kmem[i].lock);
+
+      if(r){
+        break;
+      }
+    }
+  }
+
+  pop_off();
+
+//  push_off();
+//  int temp = cpuid();
+//  if(r){
+//    printf("cpuid:%d,success get memory:%p\n",temp,r);
+//  }else{
+//    printf("cpuid:%d,fail get memory:%p\n",temp,r);
+//  }
+//  pop_off();
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
