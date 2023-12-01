@@ -117,6 +117,7 @@ void            swtch(struct context*, struct context*);
 // spinlock.c
 void            acquire(struct spinlock*);
 int             holding(struct spinlock*);
+int             islock(struct spinlock *);
 void            initlock(struct spinlock*, char*);
 void            release(struct spinlock*);
 void            push_off(void);

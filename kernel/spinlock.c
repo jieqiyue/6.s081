@@ -95,8 +95,11 @@ acquire(struct spinlock *lk)
 void
 release(struct spinlock *lk)
 {
-  if(!holding(lk))
+  if(!holding(lk)){
+    printf("panic release lock ,lock name:%s\n",lk->name);
     panic("release");
+  }
+
 
   lk->cpu = 0;
 
@@ -130,6 +133,13 @@ holding(struct spinlock *lk)
   return r;
 }
 
+int
+islock(struct spinlock *lk)
+{
+  int r;
+  r = (lk->locked);
+  return r;
+}
 // push_off/pop_off are like intr_off()/intr_on() except that they are matched:
 // it takes two pop_off()s to undo two push_off()s.  Also, if interrupts
 // are initially off, then push_off, pop_off leaves them off.
