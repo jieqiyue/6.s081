@@ -383,12 +383,14 @@ iunlockput(struct inode *ip)
 // If there is no such block, bmap allocates one.
 // returns 0 if out of disk space.
 // 将文件分为1024一块的大小，对于一个指定的块号来说，它一定存放在inode的addrs中。也就是说文件的块号，一定能对应到磁盘的某一个块号。
+// 函数作用是返回bn这个块号在磁盘中的block number。一个文件是要被分成很多个块的。前面的12块是直接块，也就能直接对应在inode结构体中的
+// addr数组里面。
 static uint
 bmap(struct inode *ip, uint bn)
 {
   uint addr, *a;
   struct buf *bp;
-
+ // printf("in bmap,bn is %d\n",bn);
   // 这里传入的bn就直接是表示的文件的第几块，对于一个文件来说，前面12块都是直接块。
   if(bn < NDIRECT){
     if((addr = ip->addrs[bn]) == 0){
@@ -400,10 +402,11 @@ bmap(struct inode *ip, uint bn)
     return addr;
   }
   bn -= NDIRECT;
-
+   // bn = 11 + 256
+  // 因为在上面已经用bn减去了NDIRECT，所以下面这个if判断可以直接和NINDIRECT进行判断，而不是NINDIRECT + NDIRECT进行判断。
   if(bn < NINDIRECT){
     // Load indirect block, allocating if necessary.
-    // 下标为12的位置是二级指针的位置，如果这里是0的话，代表还没有分配。
+    // 下标为12的位置是二级指针的位置，如果这里是0的话，代表还没有分配。所以在此处分配。
     if((addr = ip->addrs[NDIRECT]) == 0){
       addr = balloc(ip->dev);
       if(addr == 0)
@@ -412,7 +415,9 @@ bmap(struct inode *ip, uint bn)
     }
     // addr是通过balloc从整个磁盘取到的一个能用的block的number。
     // 然后新分配的话，bp里面的data是空的。
+    // 一个block是1024字节，一个block能存放256个二级块号，所以一个块号占用4字节。
     bp = bread(ip->dev, addr);
+    // 这里将bp->data转为uint类型指针。一个uint类型刚好占用4字节。所以a后面可以使用数组下标运算符。
     a = (uint*)bp->data;
     if((addr = a[bn]) == 0){
         // 这里发现如果是空的话，需要分配真实的，二级页面
@@ -427,6 +432,45 @@ bmap(struct inode *ip, uint bn)
     return addr;
   }
 
+  // 还是需要先减去NINDIRECT
+  bn -= NINDIRECT;
+  if(bn < NDODIRECT){
+      // 先定位一下这个bn是在什么下标位置，由于是有两级的结构，每一个第一级都能够存储256个二级块。
+      int firstindex = bn / NINDIRECT;
+    // 首先判断一下inode结构中的二级指针这个位置是不是空的，如果是空的，则要分配一个新的
+      if((addr = ip->addrs[NDIRECT + 1]) == 0){
+          addr = balloc(ip->dev);
+          if(addr == 0)
+              return 0;
+          ip->addrs[NDIRECT + 1] = addr;
+      }
+      bp = bread(ip->dev, addr);
+      a = (uint*)bp->data;
+      if((addr = a[firstindex]) == 0){
+          // 这个地方分配的就是一级页面
+          addr = balloc(ip->dev);
+          if(addr){
+              a[firstindex] = addr;
+              log_write(bp);
+          }
+      }
+      brelse(bp);
+      // 确定在二级页面中的什么位置，此时addr就是一级页面的block number。
+      int secondindex = bn % NINDIRECT;
+      bp = bread(ip->dev, addr);
+      a = (uint*)bp->data;
+      if((addr = a[secondindex]) == 0){
+          // 这个地方分配的就是一级页面
+          addr = balloc(ip->dev);
+          if(addr){
+              a[secondindex] = addr;
+              log_write(bp);
+          }
+      }
+      brelse(bp);
+      return addr;
+  }
+
   panic("bmap: out of range");
 }
 
@@ -437,8 +481,10 @@ itrunc(struct inode *ip)
 {
   int i, j;
   struct buf *bp;
+  struct buf *dbp;
   uint *a;
-
+  uint *da;
+  // 释放直接块
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
       bfree(ip->dev, ip->addrs[i]);
@@ -456,6 +502,28 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  if(ip->addrs[NDIRECT + 1]){
+      // bp现在是inode节点中的最顶级
+      bp = bread(ip->dev, ip->addrs[NDIRECT + 1]);
+      a = (uint*)bp->data;
+      for(j = 0; j < NINDIRECT; j++){
+          // 这里的a是第一级
+          if(a[j]){
+               dbp = bread(ip->dev,a[j]);
+               da = (uint*)dbp->data;
+               for(int k = 0;k < NINDIRECT;k++){
+                   if(da[k]){
+                       bfree(ip->dev,da[k]);
+                   }
+               }
+              brelse(dbp);
+              bfree(ip->dev,a[j]);
+          }
+      }
+      brelse(bp);
+      ip->addrs[NDIRECT + 1] = 0;
   }
 
   ip->size = 0;
@@ -478,7 +546,7 @@ stati(struct inode *ip, struct stat *st)
 // Caller must hold ip->lock.
 // If user_dst==1, then dst is a user virtual address;
 // otherwise, dst is a kernel address.
-// off参数是指的在这个文件中的偏移量
+// off参数是指的在这个文件中的偏移量,n是要读取的字节数，n不能为负数。并且n加上偏移量不能超过整个文件的大小。
 int
 readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
 {
@@ -491,10 +559,12 @@ readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
     n = ip->size - off;
 
   for(tot=0; tot<n; tot+=m, off+=m, dst+=m){
+      // 得到的是真实的物理磁盘的block number。
     uint addr = bmap(ip, off/BSIZE);
     if(addr == 0)
       break;
     bp = bread(ip->dev, addr);
+    // 以防最后那部分，多读取了
     m = min(n - tot, BSIZE - off%BSIZE);
     if(either_copyout(user_dst, dst, bp->data + (off % BSIZE), m) == -1) {
       brelse(bp);
@@ -526,6 +596,9 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
 
   for(tot=0; tot<n; tot+=m, off+=m, src+=m){
     uint addr = bmap(ip, off/BSIZE);
+    if(addr == 0){
+        printf("bmpa return 0,when pass %d\n",off/BSIZE);
+    }
     if(addr == 0)
       break;
     bp = bread(ip->dev, addr);
@@ -676,6 +749,7 @@ namex(char *path, int nameiparent, char *name)
       iunlockput(ip);
       return 0;
     }
+    // 如果nameiparent传入1的话，返回的是最后一个元素的父目录的inode，如果是0的话，就是最后一个节点的inode。
     if(nameiparent && *path == '\0'){
       // Stop one level early.
       iunlock(ip);

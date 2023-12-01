@@ -168,6 +168,7 @@ filewrite(struct file *f, uint64 addr, int n)
 
       if(r != n1){
         // error from writei
+        //printf("in filewrite,r != n1\n");
         break;
       }
       i += r;
@@ -176,7 +177,9 @@ filewrite(struct file *f, uint64 addr, int n)
   } else {
     panic("filewrite");
   }
-
+//  if(ret == -1){
+//    printf("in filewrite,return -1\n");
+//  }
   return ret;
 }
 
