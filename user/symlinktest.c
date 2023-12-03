@@ -66,11 +66,11 @@ testsymlink(void)
 
   fd1 = open("/testsymlink/a", O_CREATE | O_RDWR);
   if(fd1 < 0) fail("failed to open a");
-
+  printf("open success\n");
   r = symlink("/testsymlink/a", "/testsymlink/b");
   if(r < 0)
     fail("symlink b -> a failed");
-
+  printf("create soft link success\n");
   if(write(fd1, buf, sizeof(buf)) != 4)
     fail("failed to write to a");
 
@@ -78,18 +78,20 @@ testsymlink(void)
     fail("failed to stat b");
   if(st.type != T_SYMLINK)
     fail("b isn't a symlink");
-
+  printf("用户空间：/testsymlink/b成功的被认为是软链接\n");
   fd2 = open("/testsymlink/b", O_RDWR);
   if(fd2 < 0)
     fail("failed to open b");
   read(fd2, &c, 1);
+  printf("用户空间：第一个字符成功被读取到c\n");
   if (c != 'a')
     fail("failed to read bytes from b");
-
+  printf("用户空间：第一个字符成功被读取到c，并且被认为是'a'\n");
   unlink("/testsymlink/a");
+  printf("用户空间：###########\n");
   if(open("/testsymlink/b", O_RDWR) >= 0)
     fail("Should not be able to open b after deleting a");
-
+  printf("用户空间：###########\n");
   r = symlink("/testsymlink/b", "/testsymlink/a");
   if(r < 0)
     fail("symlink a -> b failed");
@@ -97,7 +99,7 @@ testsymlink(void)
   r = open("/testsymlink/b", O_RDWR);
   if(r >= 0)
     fail("Should not be able to open b (cycle b->a->b->..)\n");
-  
+  printf("用户空间：成功第二次打开/testsymlink/b\n");
   r = symlink("/testsymlink/nonexistent", "/testsymlink/c");
   if(r != 0)
     fail("Symlinking to nonexistent file should succeed\n");
@@ -140,7 +142,7 @@ concur(void)
   int nchild = 2;
 
   printf("Start: test concurrent symlinks\n");
-    
+
   fd = open("/testsymlink/z", O_CREATE | O_RDWR);
   if(fd < 0) {
     printf("FAILED: open failed");

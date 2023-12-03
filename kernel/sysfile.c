@@ -323,18 +323,34 @@ sys_open(void)
       return -1;
     }
   } else {
+    printf("kernel:sys_open,before namei,path is:%s\n",path);
     if((ip = namei(path)) == 0){
       end_op();
       return -1;
     }
+    printf("kernel:sys_open,after namei\n");
+    printf("ip stat:%p,ref:%d\n",ip,ip->ref);
     ilock(ip);
+    printf("kernel:sys_open,after ilock ip\n");
     if(ip->type == T_DIR && omode != O_RDONLY){
       iunlockput(ip);
       end_op();
       return -1;
     }
   }
-
+  // 到这里ip已经是对path拿到了的
+  if(ip->type == T_SYMLINK && !(omode & O_NOFOLLOW)){
+    // 在这里对ip进行转化，转化为真实的文件
+    printf("kernel:sys_open,the first ip is soft link\n");
+    ip = softlinki(ip,omode);
+    if(ip == 0){
+      printf("kernel:sys_open,fail read到了 soft link为inode\n");
+      return -1;
+    }
+   // ilock(ip);
+    printf("kernel:sys_open,success read到了 soft link为inode\n");
+  }
+  printf("kernel:sys_open,开始进行存储文件描述符\n");
   if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
     iunlockput(ip);
     end_op();
@@ -364,7 +380,9 @@ sys_open(void)
     itrunc(ip);
   }
 
+  printf("in kernel:sys_open last goto unlock the ip lock\n");
   iunlock(ip);
+  printf("in kernel:sys_open last goto unlock the ip lock success!!!\n");
   end_op();
 
   return fd;
@@ -502,4 +520,64 @@ sys_pipe(void)
     return -1;
   }
   return 0;
+}
+
+uint64 sys_symlink(void){
+  char name[DIRSIZ], path[MAXPATH], target[MAXPATH];
+  struct inode *pathnode;
+
+  if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0)
+    return -1;
+
+  printf("kernel:sys_symlink begin\n");
+  // 读取target的inode，以便于判断是否是目录，如果是目录的话，直接返回失败
+  begin_op();
+//  if((ip = namei(target)) == 0){
+//    //end_op();
+//    printf("!!!!!!!!!!@@@@@@@@@@@");
+//    //return -1;
+//  }
+//
+//  ilock(ip);
+//  if(ip->type == T_DIR){
+//    iunlockput(ip);
+//    end_op();
+//    return -1;
+//  }
+//
+//  iunlock(ip);
+  // 此时可以确定这个target是一个文件
+  // 找到path为路径的最底层路径的父节点，在这个父节点中创建一个dirent。dirent的name就是path最后一个节点的名字。
+  // 然后dirent的block number就是新创建一个inode的inode number。这个新建的inode number的类型是soft link。
+  // 这个新建inode的addrs指向的磁盘扇区里面存放要创建软链接的target路径名。
+  printf("kernel:sys_symlink second part\n");
+  if((pathnode = namei(path)) == 0){
+    pathnode = create(path, T_SYMLINK, 0, 0);
+  }else{
+    ilock(pathnode);
+  }
+  //pathnode = create(path, T_SYMLINK, 0, 0);
+  if(pathnode == 0){
+    goto bad;
+  }
+//  if((dp = nameiparent(path, name)) == 0)
+//    goto bad;
+  printf("kernel:sys_symlink third part\n");
+ // ilock(pathnode);
+  printf("kernel:sys_symlink 3.3 part\n");
+  if(filesoftlink(pathnode, name, target) < 0){
+    printf("error,file soft link ###\n");
+    iunlockput(pathnode);
+    goto bad;
+  }
+  printf("kernel:sys_symlink forth part\n");
+  iunlockput(pathnode);
+  //iput(ip);
+
+  end_op();
+  printf("kernel:sys_symlink five part\n");
+  return 0;
+bad:
+  end_op();
+  return -1;
 }

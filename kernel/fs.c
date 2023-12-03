@@ -20,6 +20,7 @@
 #include "fs.h"
 #include "buf.h"
 #include "file.h"
+#include "fcntl.h"
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 // there should be one superblock per disk device, but we run with
@@ -256,6 +257,7 @@ iget(uint dev, uint inum)
   empty = 0;
   for(ip = &itable.inode[0]; ip < &itable.inode[NINODE]; ip++){
     if(ip->ref > 0 && ip->dev == dev && ip->inum == inum){
+      // 这里加一是为了在操作这个inode时候，不被删除掉。
       ip->ref++;
       release(&itable.lock);
       return ip;
@@ -300,9 +302,9 @@ ilock(struct inode *ip)
 
   if(ip == 0 || ip->ref < 1)
     panic("ilock");
-
+  printf("ilock get lock,is lockd?%d\n",ip->lock.locked);
   acquiresleep(&ip->lock);
-
+  printf("ilock get lock success\n");
   if(ip->valid == 0){
     bp = bread(ip->dev, IBLOCK(ip->inum, sb));
     dip = (struct dinode*)bp->data + ip->inum%IPB;
@@ -547,6 +549,8 @@ stati(struct inode *ip, struct stat *st)
 // If user_dst==1, then dst is a user virtual address;
 // otherwise, dst is a kernel address.
 // off参数是指的在这个文件中的偏移量,n是要读取的字节数，n不能为负数。并且n加上偏移量不能超过整个文件的大小。
+// inode是一个描述文件信息的节点，readi是用来读取文件的。那么，其实传入的off这个偏移量指的是文件的偏移量，而不是inode的偏移量。
+// 具体来说是会从inode中的addrs数组中取出block number，再根据这个number去获取到具体的扇区，再读出来的。
 int
 readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
 {
@@ -674,6 +678,7 @@ dirlink(struct inode *dp, char *name, uint inum)
   }
 
   // Look for an empty dirent.
+  // dp也是一个inode，它是一个目录的inode。这个inode中的addrs数组里面的block number指代的磁盘扇区里面存放的是dirent结构体。
   for(off = 0; off < dp->size; off += sizeof(de)){
     if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
       panic("dirlink read");
@@ -732,6 +737,7 @@ skipelem(char *path, char *name)
 // If parent != 0, return the inode for the parent and copy the final
 // path element into name, which must have room for DIRSIZ bytes.
 // Must be called inside a transaction since it calls iput().
+//
 static struct inode*
 namex(char *path, int nameiparent, char *name)
 {
@@ -743,6 +749,7 @@ namex(char *path, int nameiparent, char *name)
   else
     ip = idup(myproc()->cwd);
 
+  // skipelem("a/bb/c", name) = "bb/c", setting name = "a"
   while((path = skipelem(path, name)) != 0){
     ilock(ip);
     if(ip->type != T_DIR){
@@ -755,10 +762,12 @@ namex(char *path, int nameiparent, char *name)
       iunlock(ip);
       return ip;
     }
+    printf("namex开始寻找name:%s\n",name);
     if((next = dirlookup(ip, name, 0)) == 0){
       iunlockput(ip);
       return 0;
     }
+    printf("寻找到了name:%s,is lockd?%d\n",name,next->lock.locked);
     iunlockput(ip);
     ip = next;
   }
@@ -766,6 +775,7 @@ namex(char *path, int nameiparent, char *name)
     iput(ip);
     return 0;
   }
+  printf("in namex ,ip is lockd?%d\n",ip->lock.locked);
   return ip;
 }
 
@@ -780,4 +790,77 @@ struct inode*
 nameiparent(char *path, char *name)
 {
   return namex(path, 1, name);
+}
+
+// dp是path最后一个节点的父节点，也就是那个目录
+int filesoftlink(struct inode *dp,char *name,char *target){
+  // 硬链接不需要创建新的inode，而软链接需要。这个新建的inode的type就是soft link。
+//  int off;
+//  struct dirent de;
+//  struct inode *ip;
+
+//  if((ip = ialloc(dp->dev, T_SYMLINK)) == 0){
+//    iunlockput(dp);
+//    return 0;
+//  }
+//
+//  // 遍历dp的addrs，找到一个合适的dirent。
+//  for(off = 0; off < dp->size; off += sizeof(de)){
+//    if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+//      panic("dirlink read");
+//    if(de.inum == 0)
+//      break;
+//  }
+//
+//  // 找到了合适的dirent。
+//  de.inum = ip->inum;
+//  strncpy(de.name, name, DIRSIZ);
+//
+//  if(writei(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+//    return -1;
+  // 将target的路径名写入ip这个inode中
+  if(writei(dp, 0, (uint64)target, dp->size, MAXPATH) != MAXPATH)
+    return -1;
+
+  return 0;
+}
+
+struct inode *
+softlinki(struct inode *ip,int op){
+  struct inode *last = 0;
+
+  // 如果op里面设置了O_NOFOLLOW，那只要查询一次，不然就最多转化10次
+  int times = MAXRSSOFTLINK;
+//  if(op & O_NOFOLLOW){
+//    printf("set times = 1\n");
+//    times = 1;
+//  }
+
+  char path[MAXPATH];
+  for (int i = 0; i < times; ++i) {
+    // 从inode中读取path
+    if(readi(ip, 0, (uint64)path, ip->size-MAXPATH, MAXPATH) != MAXPATH)
+      panic("dirlookup read");
+
+    iunlockput(ip);
+    printf("kernel:softlinki,the %d 次读取，读取到的路径名是%s\n",i,path);
+    if((ip = namei(path)) == 0){
+      end_op();
+      return last;
+    }
+
+    ilock(ip);
+    if(ip->type == T_FILE){
+      last = ip;
+      break;
+    }
+  }
+
+  if(ip->type != T_FILE){
+    iunlockput(ip);
+    end_op();
+    printf("after too many recursively,the file is still soft link.\n");
+  }
+
+  return last;
 }

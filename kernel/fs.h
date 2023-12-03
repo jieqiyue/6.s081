@@ -4,7 +4,7 @@
 
 #define ROOTINO  1   // root i-number
 #define BSIZE 1024  // block size
-
+#define MAXRSSOFTLINK 10
 // Disk layout:
 // [ boot block | super block | log | inode blocks |
 //                                          free bit map | data blocks]
@@ -54,6 +54,10 @@ struct dinode {
 // Directory is a file containing a sequence of dirent structures.
 #define DIRSIZ 14
 
+// inode中的addrs里面的block number指代的扇区里面存放的就是dirent。
+// 比如说一个目录，目录下面有多个条目，可能是文件，也可能继续是目录，就对应着一个一个的dirent。
+// 然后一个dirent有inum，这个inum又是一个inode编号。所以一个inum又可以找到这个目录或者是这个文件的inode。
+// 进而取出这个inode。
 struct dirent {
   ushort inum;  // inode number
   char name[DIRSIZ];
