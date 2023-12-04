@@ -33,9 +33,10 @@
 // Contents of the header block, used for both the on-disk header block
 // and to keep track in memory of logged block# before commit.
 struct logheader {
-  int n;  // 对于logged blocks的计数n，n是从0开始的，每一个就代表了一个日志位置，注意这里说的位置是磁盘中专门用来存放日志的那一段区域的下标。
+  int n;  // 有多少个buf结构体（每一个buf就代表了一个block）当前是在log中记录的。对于logged blocks的计数n，n是从0开始的，
+  // 每一个就代表了一个日志位置，注意这里说的位置是磁盘中专门用来存放日志的那一段区域的下标。
   // 比如说n等于1的话，就是第二个位置。磁盘中划分了一些block来专门作为日志存放的。也就是从log.start开始算的第几个block。
-  int block[LOGSIZE];  // 记录了每个logged blocks要写入的目标磁盘位置
+  int block[LOGSIZE]; // 记录了真实要写入到磁盘的哪个block number。 // 记录了每个logged blocks要写入的目标磁盘位置
 };
 
 struct log {
@@ -238,6 +239,7 @@ log_write(struct buf *b)
   }
   log.lh.block[i] = b->blockno;
   if (i == log.lh.n) {  // Add new block to log?
+    // 为什么需要bpin一下
     bpin(b);
     log.lh.n++;
   }
