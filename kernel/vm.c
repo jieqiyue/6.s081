@@ -5,7 +5,11 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
-
+#include "spinlock.h"
+#include "proc.h"
+#include "fcntl.h"
+#include "sleeplock.h"
+#include "file.h"
 /*
  * the kernel's page table.
  */
@@ -238,6 +242,7 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
   if(newsz < oldsz)
     return oldsz;
 
+  // 这里很关键，需要向上对齐。防止重复分配页，覆盖掉原先的。
   oldsz = PGROUNDUP(oldsz);
   for(a = oldsz; a < newsz; a += PGSIZE){
     mem = kalloc();
@@ -448,4 +453,129 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+int dommap(uint64 misaddr){
+  struct proc *p = myproc();
+
+  if(misaddr >= MAXVA || (misaddr <= PGROUNDDOWN(p->trapframe->sp) && misaddr >= PGROUNDDOWN(p->trapframe->sp) - PGSIZE)){
+    printf("misaddr bigger than MAXVA or addr in guard page!\n");
+    return -1;
+  }
+  int i = 0;
+  for(;i < MAXMMAP;i++){
+    if(p->ofmmap[i].used && p->ofmmap[i].address <= misaddr && misaddr < p->ofmmap[i].address + p->ofmmap[i].len){
+      printf("######i is:%d,address:%x,len:%x\n",i,p->ofmmap[i].address,p->ofmmap[i].len);
+      break;
+    }
+  }
+
+  if(i == MAXMMAP){
+    printf("misaddr is not mmap address,kill the process.\n");
+    exit(-1);
+  }
+  // walk最后一个参数需要传入1，代表要分配沿途的pte。最后返回的pte是第三级页表的pte，但是应该是还没有创建真实的物理页面。
+  pte_t *pte = walk(p->pagetable,misaddr,1);
+  printf("misaddr is:%x\n",misaddr);
+  if(*pte != 0 && *pte & PTE_V){
+    printf("trap.c:usertrap fail,the pte is not 0\n");
+    exit(-1);
+  }
+//    if(pte == 0 || (*pte & PTE_V) == 0){
+//      exit(-1);
+//    }
+//
+//    if(!(*pte & PTE_C)){
+//      exit(-1);
+//    }
+  printf("mmap begin  alloc mem\n");
+  char *mem;
+  if((mem = kalloc()) == 0){
+    exit(-1);
+  }
+  memset(mem, 0, PGSIZE);
+  struct file *tt = p->ofmmap[i].rfile;
+  struct inode *ip = tt->ip;
+  ilock(ip);
+  // 由于这里读取的偏移量可能是任意一个位置的，但是在mmap返回的时候的那个地址就对应着文件的开始地址。
+  // 然后每次都是分配一个pagesize的大小，所以偏移量需要向下取整到pagesize的大小。
+  int offset = ((misaddr - p->ofmmap[i].address) / PGSIZE) * PGSIZE;
+  printf("offset is :%d,i is %d,second begin addr is:%x\n",offset,i,p->ofmmap[1].address);
+  int mmapreadbyte = 0;
+  if((mmapreadbyte = readi(ip, 0, (uint64)mem, offset, PGSIZE)) <= 0){
+    printf("mmap,except read:PGSIZE,read:%d\n",mmapreadbyte);
+    panic("mmap read");
+  }
+  printf("mmap read:%d byte from file \n",mmapreadbyte);
+  iunlock(ip);
+  printf("mmap read success\n");
+  int flags = PTE_U | PTE_V;
+  if(p->ofmmap[i].port & PROT_READ){
+    flags = flags | PTE_R;
+  }
+  if(p->ofmmap[i].port & PROT_WRITE){
+    flags = flags | PTE_W;
+  }
+  if(p->ofmmap[i].port & PROT_EXEC){
+    flags = flags | PTE_X;
+  }
+
+//    uint64 paaddr = PTE2PA(*pte);
+//    memmove(mem, (char*)paaddr, PGSIZE);
+//    int flags = PTE_FLAGS(*pte);
+  *pte = (*pte) & (~PTE_V);
+
+  if(mappages(p->pagetable, PGROUNDDOWN(misaddr), PGSIZE, (uint64)mem, flags) != 0){
+    kfree(mem);
+    return -1;
+  }
+
+  return 1;
+}
+
+int domunmap(uint64 addr,int len){
+  struct proc *p = myproc();
+  // 首先寻找到要释放的哪一块mmap
+  int index = 0;
+  for(;index < MAXMMAP;index++){
+    if(p->ofmmap[index].used){
+      if(addr >= p->ofmmap[index].address && addr <= (p->ofmmap[index].address + p->ofmmap[index].len)){
+        break;
+      }
+    }
+  }
+
+  if(index >= MAXMMAP){
+    printf("mmap release a illegal address\n");
+    return -1;
+  }
+
+  uint64 end = addr + len;
+  int isall = 0;
+  if(addr + len >= p->ofmmap[index].address + p->ofmmap[index].len){
+    end = p->ofmmap[index].address + p->ofmmap[index].len;
+    isall = 1;
+  }
+  uint64 begin = PGROUNDDOWN(addr);
+  //end = PGROUNDUP(end);
+
+  pte_t *pte;
+  while(begin < end){
+    if(p->ofmmap[index].flag & MAP_SHARED){
+      filewrite(p->ofmmap[index].rfile, begin, PGSIZE);
+    }
+
+    pte = walk(p->pagetable,begin,0);
+    if(pte != 0 && *pte & PTE_V){
+      uvmunmap(p->pagetable,begin,1,1);
+    }
+    begin += PGSIZE;
+  }
+
+  if(isall){
+    p->ofmmap[index].used = 0;
+    fileclose(p->ofmmap[index].rfile);
+  }
+
+  return 1;
 }

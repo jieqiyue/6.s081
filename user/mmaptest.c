@@ -60,7 +60,7 @@ void
 makefile(const char *f)
 {
   int i;
-  int n = PGSIZE/BSIZE;
+  int n = PGSIZE/BSIZE;  // 4
 
   unlink(f);
   int fd = open(f, O_WRONLY | O_CREATE);
@@ -113,7 +113,9 @@ mmap_test(void)
   char *p = mmap(0, PGSIZE*2, PROT_READ, MAP_PRIVATE, fd, 0);
   if (p == MAP_FAILED)
     err("mmap (1)");
+  printf("user level,mmap return address is:%p\n",p);
   _v1(p);
+  printf("user level,v1 success!\n");
   if (munmap(p, PGSIZE*2) == -1)
     err("munmap (1)");
 
@@ -253,7 +255,7 @@ fork_test(void)
   int pid;
   const char * const f = "mmap.dur";
   
-  printf("fork_test starting\n");
+  printf("fork_test starting=========================\n");
   testname = "fork_test";
   
   // mmap the file twice.
@@ -264,10 +266,11 @@ fork_test(void)
   char *p1 = mmap(0, PGSIZE*2, PROT_READ, MAP_SHARED, fd, 0);
   if (p1 == MAP_FAILED)
     err("mmap (4)");
+  printf("return p1:%x\n",p1);
   char *p2 = mmap(0, PGSIZE*2, PROT_READ, MAP_SHARED, fd, 0);
   if (p2 == MAP_FAILED)
     err("mmap (5)");
-
+  printf("return p1:%x\n",p1);
   // read just 2nd page.
   if(*(p1+PGSIZE) != 'A')
     err("fork mismatch (1)");
@@ -276,7 +279,9 @@ fork_test(void)
     err("fork");
   if (pid == 0) {
     _v1(p1);
+    printf("son begin to release men##################\n");
     munmap(p1, PGSIZE); // just the first page
+    printf("son success release men#################\n");
     exit(0); // tell the parent that the mapping looks OK.
   }
 

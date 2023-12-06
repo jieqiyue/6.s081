@@ -15,7 +15,7 @@ struct elfhdr {
   uint flags;
   ushort ehsize;
   ushort phentsize;
-  ushort phnum;
+  ushort phnum; // Number of program headers
   ushort shentsize;
   ushort shnum;
   ushort shstrndx;
@@ -28,8 +28,8 @@ struct proghdr {
   uint64 off;
   uint64 vaddr;
   uint64 paddr;
-  uint64 filesz;
-  uint64 memsz;
+  uint64 filesz; // 这个节在文件中占据的大小
+  uint64 memsz; // 在内存中占据的大小
   uint64 align;
 };
 

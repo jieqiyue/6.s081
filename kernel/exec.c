@@ -49,6 +49,7 @@ exec(char *path, char **argv)
   if((pagetable = proc_pagetable(p)) == 0)
     goto bad;
 
+  printf("现在加载的是：%s文件\n",path);
   // Load program into memory.
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
     if(readi(ip, 0, (uint64)&ph, off, sizeof(ph)) != sizeof(ph))
@@ -61,6 +62,8 @@ exec(char *path, char **argv)
       goto bad;
     if(ph.vaddr % PGSIZE != 0)
       goto bad;
+    printf("现在读取到了第%d个文件，type:%d,offset:%x,vaddr:%x,paddr:%x,filesz:%x,memsz:%x\n",
+           i,ph.type,ph.off,ph.vaddr,ph.paddr,ph.filesz,ph.memsz);
     uint64 sz1;
     if((sz1 = uvmalloc(pagetable, sz, ph.vaddr + ph.memsz, flags2perm(ph.flags))) == 0)
       goto bad;

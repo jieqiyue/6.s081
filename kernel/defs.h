@@ -12,6 +12,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+//struct file;
 #ifdef LAB_NET
 struct mbuf;
 struct sock;
@@ -187,7 +188,8 @@ uint64          walkaddr(pagetable_t, uint64);
 int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
-
+int             dommap(uint64);
+int             domunmap(uint64 ,int);
 // plic.c
 void            plicinit(void);
 void            plicinithart(void);

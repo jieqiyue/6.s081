@@ -503,3 +503,101 @@ sys_pipe(void)
   }
   return 0;
 }
+
+// 在mmap的时候，并不真实分配内存。这里有一个问题就是，要寻找到一个未被使用的用户空间的地址，然后做这个映射，并返回回去。
+// 怎样寻找到一个地址，并且mmap返回的时候，其实是没有真实分配的，就要保证分配之后，这个地址就不能再被其它使用了。
+uint64 sys_mmap(void){
+  int len, port, flag, fd, offset;
+  uint64 addr;
+  argaddr(0, &addr);
+  argint(1, &len);
+  argint(2, &port);
+  argint(3, &flag);
+  if(argfd(4,&fd,0) < 0){
+    return -1;
+  }
+ // argint(4, &fd);
+  argint(5, &offset);
+
+  if(len < 0){
+    return -1;
+  }
+  // 由于可以把addr一直当做0
+  struct proc *p = myproc();
+  // 检查文件的打开形式和mmap传入的需要的权限是否匹配
+  if(p->ofile[fd] == 0){
+    printf("sys_mmap,fd is not exist\n");
+    return -1;
+  }
+
+  if(port & PROT_READ && !p->ofile[fd]->readable){
+    printf("sys_mmap,require read permission,but fd not\n");
+    return -1;
+  }
+
+  if(flag & MAP_SHARED && port & PROT_WRITE && !p->ofile[fd]->writable){
+    printf("sys_mmap,require write permission,but fd not\n");
+    return -1;
+  }
+
+  printf("in mmap,before up page:%x\n",p->sz);
+  int originsz = PGROUNDUP(p->sz);
+  while(1){
+    pte_t * pte = walk(p->pagetable, originsz, 0);
+    if(pte != 0 && ((*pte) & PTE_V)){
+      printf("add a page size\n");
+      originsz += PGSIZE;
+    }else if(pte == 0 || *pte == 0){
+      printf("pte is 0\n");
+      break;
+    }
+    printf("xunhuan +1,pte is:%p\n",*pte);
+  }
+  printf("in mmap,after up page:%x\n",originsz);
+  // 增长len个长度，当前这些内存不会被再次分配。
+  p->sz = originsz + len;
+
+  // 选择一个位置用来存放这次mmap的信息
+  int index = 0;
+  for (; index < MAXMMAP; ++index) {
+    if(p->ofmmap[index].used == 0){
+      break;
+    }
+  }
+  if(index >= MAXMMAP){
+    return -1;
+  }
+
+  p->ofmmap[index].used = 1;
+  // 由于没有使用系统调用传入的开始地址，而是自己选择了一个未使用的地址。所以这里要记录到proc结构体中的ofmmap结构体中
+  p->ofmmap[index].address = originsz;
+  p->ofmmap[index].len = len;
+  p->ofmmap[index].port = port;
+  p->ofmmap[index].flag = flag;
+  p->ofmmap[index].offset = offset;
+  p->ofmmap[index].rfile = p->ofile[fd];
+  p->ofmmap[index].fd = fd;
+  p->ofmmap[index].used = 1;
+
+  filedup(p->ofmmap[index].rfile);
+
+  return originsz;
+}
+
+uint64 sys_munmap(void){
+  uint64 addr;
+  int len;
+  argaddr(0, &addr);
+  argint(1, &len);
+
+  if(len == 0){
+    printf("sys_mmap free zero len mem.\n");
+    return 1;
+  }
+
+  if(domunmap(addr, len) < 0){
+    return -1;
+  }
+
+  return 1;
+}

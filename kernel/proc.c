@@ -264,6 +264,10 @@ growproc(int n)
 
   sz = p->sz;
   if(n > 0){
+    // 看起来这的sz不是和pagesize对齐的，其实没有关系。对于用户空间来说，只需要返回一个能使用的地址就行了。
+    // 比如说返回的就是proc里面的sz。这个sz不一定是页对齐的。但是用户态能够使用这个返回的地址就行。并且内核能够保证
+    // 至少分配用户所要求的那么多的内存。至于内核返回的地址是不是对齐的不重要。内核有可能会多分配了一些，比如说用户态要求的是10个字节，但是
+    // 内核至少是分配一个页。这些多出来的虽然用户态没有要求分配，但是也分配了。
     if((sz = uvmalloc(p->pagetable, sz, sz + n, PTE_W)) == 0) {
       return -1;
     }
@@ -288,6 +292,19 @@ fork(void)
     return -1;
   }
 
+  for(int i = 0;i < MAXMMAP;i++){
+    if(p->ofmmap[i].used){
+      np->ofmmap[i].used = 1;
+      np->ofmmap[i].address = p->ofmmap[i].address;
+      np->ofmmap[i].len = p->ofmmap[i].len;
+      np->ofmmap[i].port = p->ofmmap[i].port;
+      np->ofmmap[i].flag = p->ofmmap[i].flag;
+      np->ofmmap[i].fd = p->ofmmap[i].fd;
+      np->ofmmap[i].offset = p->ofmmap[i].offset;
+      np->ofmmap[i].rfile = p->ofmmap[i].rfile;
+      filedup(p->ofmmap[i].rfile);
+    }
+  }
   // Copy user memory from parent to child.
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
     freeproc(np);
@@ -350,6 +367,15 @@ exit(int status)
 
   if(p == initproc)
     panic("init exiting");
+
+  for(int i = 0;i < MAXMMAP;i++){
+    if(p->ofmmap[i].used){
+//      if(domunmap(p->ofmmap[i].address, p->ofmmap[i].len) < 0){
+//        panic("proc exit unmap mmap fail.");
+//      }
+      p->ofmmap[i].used = 0;
+    }
+  }
 
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){
