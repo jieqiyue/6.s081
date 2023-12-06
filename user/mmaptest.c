@@ -270,7 +270,7 @@ fork_test(void)
   char *p2 = mmap(0, PGSIZE*2, PROT_READ, MAP_SHARED, fd, 0);
   if (p2 == MAP_FAILED)
     err("mmap (5)");
-  printf("return p1:%x\n",p1);
+  printf("return p2:%x\n",p2);
   // read just 2nd page.
   if(*(p1+PGSIZE) != 'A')
     err("fork mismatch (1)");
@@ -288,6 +288,7 @@ fork_test(void)
   int status = -1;
   wait(&status);
 
+  printf("son exit :fweewf\n");
   if(status != 0){
     printf("fork_test failed\n");
     exit(1);

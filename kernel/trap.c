@@ -69,7 +69,7 @@ usertrap(void)
     syscall();
   } else if(r_scause() == 0x000000000000000f || r_scause() == 13){
     uint64 misaddr = r_stval();
-    if(!dommap(misaddr)){
+    if(dommap(misaddr) == -1){
       exit(-1);
     }
   }else if((which_dev = devintr()) != 0){

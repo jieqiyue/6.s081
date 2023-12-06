@@ -2146,6 +2146,7 @@ void
 MAXVAplus(char *s)
 {
   volatile uint64 a = MAXVA;
+  int ti = 0;
   for( ; a != 0; a <<= 1){
     int pid;
     pid = fork();
@@ -2154,14 +2155,17 @@ MAXVAplus(char *s)
       exit(1);
     }
     if(pid == 0){
+      printf("begin to write 99\n");
       *(char*)a = 99;
       printf("%s: oops wrote %x\n", s, a);
       exit(1);
     }
     int xstatus;
+    printf("父进程开始等待\n");
     wait(&xstatus);
     if(xstatus != -1)  // did kernel kill child?
       exit(1);
+    printf("test:MAXva:%d\n",ti++);
   }
 }
 

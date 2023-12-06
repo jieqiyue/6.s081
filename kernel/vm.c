@@ -190,8 +190,12 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
     if((pte = walk(pagetable, a, 0)) == 0)
       panic("uvmunmap: walk");
+//    if((*pte & PTE_M) && (*pte & PTE_V) == 0) {
+//      continue;
+//    }
     if((*pte & PTE_V) == 0)
-      panic("uvmunmap: not mapped");
+      continue;
+      //panic("uvmunmap: not mapped");
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
@@ -322,11 +326,19 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   uint flags;
   char *mem;
 
+  //printf("begin uvmcopy:sz:%x\n",sz);
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
-    if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
+//    if(*pte & PTE_M){
+//      continue;
+//    }
+    if((*pte & PTE_V) == 0){
+      printf("uvmcopy error,the i is:%d,pte is:%x\n",i,*pte);
+      //panic("uvmcopy: page not present");
+      continue;
+    }
+
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)
@@ -459,7 +471,7 @@ int dommap(uint64 misaddr){
   struct proc *p = myproc();
 
   if(misaddr >= MAXVA || (misaddr <= PGROUNDDOWN(p->trapframe->sp) && misaddr >= PGROUNDDOWN(p->trapframe->sp) - PGSIZE)){
-    printf("misaddr bigger than MAXVA or addr in guard page!\n");
+    //printf("misaddr bigger than MAXVA or addr in guard page!\n");
     return -1;
   }
   int i = 0;
@@ -472,14 +484,14 @@ int dommap(uint64 misaddr){
 
   if(i == MAXMMAP){
     printf("misaddr is not mmap address,kill the process.\n");
-    exit(-1);
+    return -1;
   }
   // walk最后一个参数需要传入1，代表要分配沿途的pte。最后返回的pte是第三级页表的pte，但是应该是还没有创建真实的物理页面。
   pte_t *pte = walk(p->pagetable,misaddr,1);
   printf("misaddr is:%x\n",misaddr);
   if(*pte != 0 && *pte & PTE_V){
     printf("trap.c:usertrap fail,the pte is not 0\n");
-    exit(-1);
+    return -1;
   }
 //    if(pte == 0 || (*pte & PTE_V) == 0){
 //      exit(-1);
@@ -491,7 +503,7 @@ int dommap(uint64 misaddr){
   printf("mmap begin  alloc mem\n");
   char *mem;
   if((mem = kalloc()) == 0){
-    exit(-1);
+    return -1;
   }
   memset(mem, 0, PGSIZE);
   struct file *tt = p->ofmmap[i].rfile;

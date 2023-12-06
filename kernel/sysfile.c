@@ -568,6 +568,14 @@ uint64 sys_mmap(void){
     return -1;
   }
 
+//  pte_t *pte = 0;
+//  for(uint64 temp = originsz;temp < p->sz;temp += PGSIZE){
+//    pte = walk(p->pagetable,temp,1);
+//    *pte = *pte | PTE_M;
+//    printf("in sys_mmap #########mm@!#@!#ap %x\n",*pte);
+//  }
+
+
   p->ofmmap[index].used = 1;
   // 由于没有使用系统调用传入的开始地址，而是自己选择了一个未使用的地址。所以这里要记录到proc结构体中的ofmmap结构体中
   p->ofmmap[index].address = originsz;
